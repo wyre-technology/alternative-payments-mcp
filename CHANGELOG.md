@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/wyre-technology/alternative-payments-mcp/compare/v1.0.0...v1.0.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* shorten server.json description to satisfy MCP Registry 100-char limit ([1e95e52](https://github.com/wyre-technology/alternative-payments-mcp/commit/1e95e5292eaa615e791c10985f64c276429007c8))
+
 # 1.0.0 (2026-06-05)
 
 
