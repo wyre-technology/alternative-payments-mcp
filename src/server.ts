@@ -1,0 +1,118 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import { DOMAINS, getNavigationTools } from './domains/navigation.js';
+import { getDomainHandler } from './domains/index.js';
+import { getCredentials } from './utils/client.js';
+import { setServerRef } from './utils/server-ref.js';
+import { logger } from './utils/logger.js';
+import type { DomainName } from './utils/types.js';
+
+export function createServer(): Server {
+  const server = new Server(
+    { name: 'alternative-payments-mcp', version: '1.0.0' },
+    { capabilities: { tools: {}, logging: {} } },
+  );
+
+  // Expose the server for elicitation (destructive-action confirmation).
+  setServerRef(server);
+
+  // Return ALL tools upfront — navigation is a stateless discovery aid.
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const allTools = [...getNavigationTools()];
+    for (const domain of DOMAINS) {
+      const handler = await getDomainHandler(domain);
+      allTools.push(...handler.getTools());
+    }
+    return { tools: allTools };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const { name, arguments: args } = request.params;
+
+    if (name === 'ap_navigate') {
+      const domain = args?.domain as DomainName;
+      if (!DOMAINS.includes(domain)) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Invalid domain: ${domain}. Valid: ${DOMAINS.join(', ')}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+      const handler = await getDomainHandler(domain);
+      const tools = handler.getTools().map((t) => `${t.name}: ${t.description}`);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Domain: ${domain}\n\nAvailable tools:\n${tools.join('\n')}`,
+          },
+        ],
+      };
+    }
+
+    if (name === 'ap_status') {
+      const creds = getCredentials();
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              {
+                connected: !!creds,
+                environment: creds?.environment ?? null,
+                domains: DOMAINS,
+                status: 'All tools available, no domain selected',
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
+
+    for (const domain of DOMAINS) {
+      const handler = await getDomainHandler(domain);
+      const toolNames = handler.getTools().map((t) => t.name);
+      if (toolNames.includes(name)) {
+        try {
+          return await handler.handleCall(
+            name,
+            (args || {}) as Record<string, unknown>,
+            extra,
+          );
+        } catch (error) {
+          logger.error('Tool call failed', {
+            tool: name,
+            error: (error as Error).message,
+          });
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: ${(error as Error).message}` },
+            ],
+            isError: true,
+          };
+        }
+      }
+    }
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Unknown tool: ${name}. Use ap_navigate to discover available tools.`,
+        },
+      ],
+      isError: true,
+    };
+  });
+
+  return server;
+}
