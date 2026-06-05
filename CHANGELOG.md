@@ -1,3 +1,10 @@
+# 1.0.0 (2026-06-05)
+
+
+### Features
+
+* initial Alternative Payments MCP server ([b78ac53](https://github.com/wyre-technology/alternative-payments-mcp/commit/b78ac5369733e3200ffbda32fb723160f64a0626))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
