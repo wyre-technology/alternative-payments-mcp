@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.wyre-technology/alternative-payments-mcp",
   "title": "Alternative Payments",
-  "description": "MCP server for Alternative Payments: customers, invoices, payment requests, payouts, and webhooks. Read + safe writes (no direct money movement).",
+  "description": "MCP server for Alternative Payments — customers, invoices, payment requests, payouts, webhooks.",
   "repository": {
     "url": "https://github.com/wyre-technology/alternative-payments-mcp",
     "source": "github"
