@@ -1,3 +1,11 @@
+## [1.0.3](https://github.com/wyre-technology/alternative-payments-mcp/compare/v1.0.2...v1.0.3) (2026-06-12)
+
+
+### Bug Fixes
+
+* **deps:** refresh lockfile for current Trivy CVEs ([bf9b915](https://github.com/wyre-technology/alternative-payments-mcp/commit/bf9b91545819ad9baebc8b9292c11a7ebad4fed4))
+* **docker:** apk upgrade in production stage to pull OpenSSL 3.5.7-r0 ([14efbde](https://github.com/wyre-technology/alternative-payments-mcp/commit/14efbde42cd97665c1e4d2b526adf0357f54610e))
+
 ## [1.0.2](https://github.com/wyre-technology/alternative-payments-mcp/compare/v1.0.1...v1.0.2) (2026-06-12)
 
 
