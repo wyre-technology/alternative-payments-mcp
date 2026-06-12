@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/wyre-technology/alternative-payments-mcp/compare/v1.0.1...v1.0.2) (2026-06-12)
+
+
+### Bug Fixes
+
+* **docker:** remove npm CLI from production image to clear Trivy base-image CVEs ([18b1b07](https://github.com/wyre-technology/alternative-payments-mcp/commit/18b1b07c6b0c3358cc9a82524c9e139db8dff20e))
+
 ## [1.0.1](https://github.com/wyre-technology/alternative-payments-mcp/compare/v1.0.0...v1.0.1) (2026-06-05)
 
 
