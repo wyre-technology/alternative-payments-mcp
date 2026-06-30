@@ -1,11 +1,9 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   AlternativePaymentsClient,
   type Environment,
 } from '@wyre-technology/node-alternative-payments';
 import { logger } from './logger.js';
-
-let _client: AlternativePaymentsClient | null = null;
-let _credKey: string | null = null;
 
 export interface Credentials {
   clientId: string;
@@ -13,7 +11,20 @@ export interface Credentials {
   environment: Environment;
 }
 
+// Request-scoped credential store. In gateway mode the HTTP layer runs each
+// request inside runWithCredentials({clientId, clientSecret, environment});
+// getCredentials() reads it first, then falls back to process.env for
+// stdio/single-tenant mode.
+const credStore = new AsyncLocalStorage<Credentials>();
+
+export function runWithCredentials<T>(creds: Credentials, fn: () => T): T {
+  return credStore.run(creds, fn);
+}
+
 export function getCredentials(): Credentials | null {
+  const scoped = credStore.getStore();
+  if (scoped?.clientId && scoped?.clientSecret && scoped?.environment) return scoped;
+
   const clientId = process.env.ALTERNATIVE_PAYMENTS_CLIENT_ID;
   const clientSecret = process.env.ALTERNATIVE_PAYMENTS_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
@@ -28,31 +39,18 @@ export function getCredentials(): Credentials | null {
   return { clientId, clientSecret, environment };
 }
 
-export async function getClient(): Promise<AlternativePaymentsClient> {
+// Constructs a client from the request-scoped (or env) credentials. The client
+// is cheap and holds no shared mutable state, so we build one per call — never
+// a process-global singleton.
+export function getClient(): AlternativePaymentsClient {
   const creds = getCredentials();
   if (!creds) {
     throw new Error(
-      'No Alternative Payments credentials configured. Set ALTERNATIVE_PAYMENTS_CLIENT_ID and ALTERNATIVE_PAYMENTS_CLIENT_SECRET.',
+      'No Alternative Payments credentials configured. Set ALTERNATIVE_PAYMENTS_CLIENT_ID, ALTERNATIVE_PAYMENTS_CLIENT_SECRET, and ALTERNATIVE_PAYMENTS_ENVIRONMENT.',
     );
   }
-
-  // Invalidate the cached client if the gateway injected different credentials.
-  const key = `${creds.clientId}:${creds.clientSecret}:${creds.environment}`;
-  if (_client && _credKey !== key) {
-    _client = null;
-  }
-
-  if (!_client) {
-    _client = new AlternativePaymentsClient(creds);
-    _credKey = key;
-    logger.info('Created Alternative Payments API client', {
-      environment: creds.environment,
-    });
-  }
-  return _client;
-}
-
-export function resetClient(): void {
-  _client = null;
-  _credKey = null;
+  logger.debug('Building Alternative Payments API client', {
+    environment: creds.environment,
+  });
+  return new AlternativePaymentsClient(creds);
 }
