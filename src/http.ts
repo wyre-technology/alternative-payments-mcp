@@ -1,8 +1,9 @@
 import { createServer as createHttpServer } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from './server.js';
-import { getCredentials, resetClient } from './utils/client.js';
+import { getCredentials, runWithCredentials } from './utils/client.js';
 import { logger } from './utils/logger.js';
+import type { Environment } from '@wyre-technology/node-alternative-payments';
 
 function startHttpServer(): void {
   const port = parseInt(process.env.MCP_HTTP_PORT || '8080', 10);
@@ -35,49 +36,58 @@ function startHttpServer(): void {
       return;
     }
 
+    const handle = async () => {
+      const server = createServer();
+      // SECURITY-CRITICAL invariant: this transport MUST stay stateless
+      // (sessionIdGenerator: undefined + enableJsonResponse: true). Per-request
+      // tenant credentials are carried in an AsyncLocalStorage context opened by
+      // runWithCredentials() below. A stateless request->single-response flow
+      // keeps the tool call inside that context. Switching to a stateful/SSE
+      // transport (sessionIdGenerator set, persistent stream) would let a
+      // long-lived connection serve later messages under a stale/foreign
+      // credential context — re-review tenant isolation before changing this.
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+
+      res.on('close', () => {
+        transport.close();
+        server.close();
+      });
+
+      try {
+        await server.connect(transport);
+        await transport.handleRequest(req, res);
+      } catch (err) {
+        logger.error('MCP transport error', { error: (err as Error).message });
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal error' },
+              id: null,
+            }),
+          );
+        }
+      }
+    };
+
     if (isGatewayMode) {
-      const clientId = req.headers['x-alternative-payments-client-id'] as string;
-      const clientSecret = req.headers[
-        'x-alternative-payments-client-secret'
-      ] as string;
-      const environment = req.headers['x-alternative-payments-environment'] as string;
-      if (clientId || clientSecret) {
-        resetClient();
-        if (clientId) process.env.ALTERNATIVE_PAYMENTS_CLIENT_ID = clientId;
-        if (clientSecret) process.env.ALTERNATIVE_PAYMENTS_CLIENT_SECRET = clientSecret;
-        if (environment) process.env.ALTERNATIVE_PAYMENTS_ENVIRONMENT = environment;
+      const clientId = req.headers['x-alternative-payments-client-id'] as string | undefined;
+      const clientSecret = req.headers['x-alternative-payments-client-secret'] as string | undefined;
+      const rawEnv = req.headers['x-alternative-payments-environment'] as string | undefined;
+      const environment: Environment = rawEnv?.toLowerCase() === 'demo' ? 'demo' : 'production';
+
+      if (clientId && clientSecret) {
+        await runWithCredentials({ clientId, clientSecret, environment }, handle);
+        return;
       }
       // Don't reject — tools/list works without credentials.
     }
 
-    // Fresh server + transport per request (stateless) — required for gateway.
-    const server = createServer();
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    });
-
-    res.on('close', () => {
-      transport.close();
-      server.close();
-    });
-
-    try {
-      await server.connect(transport);
-      await transport.handleRequest(req, res);
-    } catch (err) {
-      logger.error('MCP transport error', { error: (err as Error).message });
-      if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal error' },
-            id: null,
-          }),
-        );
-      }
-    }
+    await handle();
   });
 
   httpServer.listen(port, host, () => {

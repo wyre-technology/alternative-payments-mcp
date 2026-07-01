@@ -110,7 +110,7 @@ async function handleCall(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<CallToolResult> {
-  const client = await getClient();
+  const client = getClient();
   switch (toolName) {
     case 'ap_list_customers':
       return ok(
